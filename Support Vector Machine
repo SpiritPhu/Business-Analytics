@@ -1,0 +1,124 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jan 20 14:24:07 2021
+
+@author: phulh5
+"""
+
+##############################################################################
+#######################Support Vector Machine#################################
+##############################################################################
+
+#import packages
+from sklearn import svm, datasets
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+#get data set from package
+iris = datasets.load_iris()
+
+#head data
+#iris = pd.DataFrame(iris.data)
+#iris.head()
+
+#input as 2 first columns
+X = iris.data[:, :2]
+
+#Output
+Y = iris.target
+
+#Plot train data
+plt.scatter(X[:,0], X[:,1], c = Y )#, cmap=plt.cm.Paired)
+plt.xlabel('Length')
+plt.ylabel('Width')
+plt.show()
+
+#Sử dụng SVM với 4 phương pháp khác nhau bao gồm:
+    
+#1. SVC with linear kernel
+#2. LinearSVC (linear kernel)
+#3. SVC with RBF kernel
+#4. SVC with polynomial (degree 3) kernel
+
+h = .02  # hiệu chỉnh độ mỏng của lưới tọa độ trên đồ thị. Càng nhỏ thì càng sắc nét
+C = 1.0  # set up SVM regularization parameter
+
+#Dev model by model
+
+SVC = svm.SVC(kernel = 'linear', C = C).fit(X,Y)
+
+LinearSVC = svm.LinearSVC(C=C).fit(X,Y)
+
+RBF_SVC = svm.SVC(kernel = 'rbf', gamma = 0.7, C = C).fit(X,Y)
+
+Poly_SVC = svm.SVC(kernel = 'poly', degree = 2, C=C).fit(X,Y)
+
+from sklearn import model_selection, preprocessing
+
+SVC_predict = SVC.predict(X)
+SVC_accuracy = model_selection.cross_val_score(SVC,
+                                          X,
+                                          Y,
+                                          cv=10).mean()
+LinearSVC_accuracy = model_selection.cross_val_score(LinearSVC,
+                                          X,
+                                          Y,
+                                          cv=10).mean()
+RBF_SVC_accuracy = model_selection.cross_val_score(RBF_SVC,
+                                          X,
+                                          Y,
+                                          cv=10).mean()
+Poly_SVC_accuracy = model_selection.cross_val_score(Poly_SVC,
+                                          X,
+                                          Y,
+                                          cv=10).mean()
+
+print('Accuracy of SVC_accuracy: ', SVC_accuracy)
+print('Accuracy of LinearSVC_accuracy: ', LinearSVC_accuracy)
+print('Accuracy of RBF_SVC_accuracy: ', RBF_SVC_accuracy)
+print('Accuracy of Poly_SVC_accuracy: ', Poly_SVC_accuracy)
+
+#Visualize the model result in graph
+
+# title for the plots
+titles = ['SVC with linear kernel',
+'LinearSVC (linear kernel)',
+'SVC with RBF kernel',
+'SVC with polynomial (degree 3) kernel']
+
+plt.subplot(2, 2, i + 1)
+
+#np.c_[xx.ravel(), yy.ravel()] with return an array with lines and columns
+
+# create a mesh to plot in
+x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+
+for i, clf in enumerate((SVC, LinearSVC, RBF_SVC, Poly_SVC)):
+
+    plt.subplot(2, 2, i + 1)
+    plt.subplots_adjust(wspace=0.4, hspace=0.4)
+
+    Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+
+    #Put the result into a color plot
+    Z = Z.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+
+    # Plot also the training points
+    plt.scatter(X[:, 0], X[:, 1], c=Y, cmap=plt.cm.coolwarm)
+    plt.xlabel('Sepal length')
+    plt.ylabel('Sepal width')
+    plt.xlim(xx.min(), xx.max())
+    plt.ylim(yy.min(), yy.max())
+    plt.xticks(())
+    plt.yticks(())
+    plt.title(titles[i])
+plt.show()
+
+###################################
+http://scikit-learn.org/stable/modules/svm.html
+https://scikit-learn.org/stable/modules/svm.html#svm-kernels
