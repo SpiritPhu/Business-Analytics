@@ -1,0 +1,410 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Dec 23 09:46:20 2020
+
+@author: phulh5
+"""
+import sys        
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier
+from dmba import classificationSummary
+from alive_progress import alive_bar
+from tqdm import tqdm
+import pickle
+from sklearn.decomposition import PCA
+from sklearn import preprocessing
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import pandasql as ps
+from imblearn.over_sampling import SMOTE
+
+#set view full rows
+pd.set_option('display.max_rows', 100)
+pd.set_option('display.max_columns', 100)
+
+#import dataset     
+df1 = pd.read_csv("G:/Phu/Ad_hoc/4G_Thuc/1608690537437_20201223_100503271_part_0.TXT", sep = '|')
+multisim = pd.read_csv("G:/Phu/Ad_hoc/4G_Thuc/multisim.csv")
+
+multisim['multisimm'] = 1
+df1.head()
+
+a = [c for c in df1.columns]
+
+df1 = df1.merge(multisim, left_on = "ISDN_201130", right_on = "isdn", how = "left")
+
+df1 = df1.rename(
+    columns = {
+        'ISDN_201130':'ISDN_201130',
+        'thuc_4g_201130':'thuc_4g_201130',
+        'TONG_CUOC_GOC_THUC_201031':'TONG_CUOC_GOC_THUC_n_1',
+        'TONG_CUOC_GOC_THUC_201130':'TONG_CUOC_GOC_THUC_n',
+        'TONG_CUOC_GOC_THUC_200930':'TONG_CUOC_GOC_THUC_n_2',
+        'num_day_4g_201130':'num_day_4g_',
+        'SO_NGAY_SU_DUNG_201130':'SO_NGAY_SU_DUNG_',
+        'NOD_PSLL_DATA_201130':'NOD_PSLL_DATA_',
+        'NOD_PSLL_THOAI_201130':'NOD_PSLL_THOAI_',
+        'SO_NGAY_BAT_MAY_201130':'SO_NGAY_BAT_MAY_',
+        'num_day_4g_201122':'num_day_4g_n',
+        'SO_NGAY_SU_DUNG_201122':'SO_NGAY_SU_DUNG_n',
+        'NOD_PSLL_DATA_201122':'NOD_PSLL_DATA_n',
+        'NOD_PSLL_THOAI_201122':'NOD_PSLL_THOAI_n',
+        'SO_NGAY_BAT_MAY_201122':'SO_NGAY_BAT_MAY_n',
+        'num_day_4g_201031':'num_day_4g_n_1',
+        'SO_NGAY_SU_DUNG_201031':'SO_NGAY_SU_DUNG_n_1',
+        'NOD_PSLL_DATA_201031':'NOD_PSLL_DATA_n_1',
+        'NOD_PSLL_THOAI_201031':'NOD_PSLL_THOAI_n_1',
+        'SO_NGAY_BAT_MAY_201031':'SO_NGAY_BAT_MAY_n_1',
+        'num_day_4g_200930':'num_day_4g_n_2',
+        'SO_NGAY_SU_DUNG_200930':'SO_NGAY_SU_DUNG_n_2',
+        'NOD_PSLL_DATA_200930':'NOD_PSLL_DATA_n_2',
+        'NOD_PSLL_THOAI_200930':'NOD_PSLL_THOAI_n_2',
+        'SO_NGAY_BAT_MAY_200930':'SO_NGAY_BAT_MAY_n_2',
+        'IS_SIM_4G_201130':'IS_SIM_4G_n',
+        'THIET_BI_201130':'THIET_BI_n',
+        'SO_LAN_NAP_THE_201122':'SO_LAN_NAP_THE_n',
+        'SO_LAN_NAP_THE_201031':'SO_LAN_NAP_THE_n_1',
+        'SO_LAN_NAP_THE_200930':'SO_LAN_NAP_THE_n_2',
+        'SO_CUOC_GOI_201122':'SO_CUOC_GOI_n',
+        'SO_CUOC_GOI_201031':'SO_CUOC_GOI_n_1',
+        'SO_CUOC_GOI_200930':'SO_CUOC_GOI_n_2',
+})
+
+df2 = df1.query('num_day_4g_n >= 3 & THIET_BI_n == "4G"')
+
+df1.groupby('thuc_4g_201130').ISDN_201130.nunique()
+
+df2 = df1.drop(columns = ['num_day_4g_', 'SO_NGAY_SU_DUNG_', 'NOD_PSLL_DATA_', 
+                          'NOD_PSLL_THOAI_', 'SO_NGAY_BAT_MAY_'])
+
+df2.head()
+
+##Normalizing (Standardizing) and Rescaling Data######################
+missing_cnt = df2.isnull().sum()
+
+df2 = df2.fillna(0)
+
+df2.dtypes
+
+df2 = pd.get_dummies(df2, columns = ['THIET_BI_n'])
+
+norm_df = (df2.drop(columns = ['ISDN_201130']) - df2.drop(columns =['ISDN_201130']).min())/ (df2.drop(columns =['ISDN_201130']).max() - df2.drop(columns =['ISDN_201130']).min())
+
+norm_df.head()
+
+outcome = 'thuc_4g_201130'
+
+predictors = [c for c in norm_df.columns if c != outcome]
+
+# partition data
+X = norm_df[predictors]
+y = norm_df[outcome]
+train_X, valid_X, train_y, valid_y = train_test_split(X, y,
+test_size=0.3,
+random_state=1)
+
+###### train neural network with 2 hidden nodes ######
+##activation 'tanh' is the hyperbolic tangent, it is usually better to scale predictors to a [−1, 1] scale
+##Deep learning uses mostly the ReLU (rectified linear unit) activation function or variants of it. This function is
+#identical to the linear function, but set to zero for s < 0
+
+clf = MLPClassifier(hidden_layer_sizes= (2,2),
+                    activation= 'logistic',
+                    solver='lbfgs',
+                    random_state = 1)
+
+clf.fit(train_X, train_y)
+
+prediction = clf.predict(train_x)
+
+
+
+###################################################################################################################################
+########################################THANG 1 2021 ##############################################################################
+###################################################################################################################################
+
+df1 = pd.read_csv("G:/Phu/Ad_hoc/4G_Thuc/4G_Thuc_T12021/tap_mau_finalll.CSV", sep = '|')
+
+df1.head()
+
+df1.groupby('thuc_4g_201231').ISDN_201231.nunique()
+
+multisim = pd.read_csv("G:/Phu/Ad_hoc/4G_Thuc/multisim.csv")
+
+multisim['multisimm'] = 1
+
+multisim
+
+df1 = df1.merge(multisim, left_on = "ISDN_201231", right_on = "isdn", how = "left")
+
+df1 = df1.drop(columns = ['isdn'])
+
+a = [c for c in df1.columns]
+
+df1.THIET_BI_201130.unique()
+
+df2 = df1.rename(
+    columns = {
+        'ISDN_201231':'ISDN_201231',
+        'thuc_4g_201231':'thuc_4g_201231',
+        'TONG_CUOC_GOC_THUC_201222':'TONG_CUOC_GOC_THUC_n',
+        'TONG_CUOC_GOC_THUC_201130':'TONG_CUOC_GOC_THUC_n_1',
+        'TONG_CUOC_GOC_THUC_201031':'TONG_CUOC_GOC_THUC_n_2',
+        'num_day_4g_201222':'num_day_4g_n',
+        'SO_NGAY_SU_DUNG_201222':'SO_NGAY_SU_DUNG_n',
+        'NOD_PSLL_DATA_201222':'NOD_PSLL_DATA_n',
+        'NOD_PSLL_THOAI_201222':'NOD_PSLL_THOAI_n',
+        'SO_NGAY_BAT_MAY_201222':'SO_NGAY_BAT_MAY_n',
+        'num_day_4g_201130':'num_day_4g_n_1',
+        'SO_NGAY_SU_DUNG_201130':'SO_NGAY_SU_DUNG_n_1',
+        'NOD_PSLL_DATA_201130':'NOD_PSLL_DATA_n_1',
+        'NOD_PSLL_THOAI_201130':'NOD_PSLL_THOAI_n_1',
+        'SO_NGAY_BAT_MAY_201130':'SO_NGAY_BAT_MAY_n_1',
+        'num_day_4g_201031':'num_day_4g_n_2',
+        'SO_NGAY_SU_DUNG_201031':'SO_NGAY_SU_DUNG_n_2',
+        'NOD_PSLL_DATA_201031':'NOD_PSLL_DATA_n_2',
+        'NOD_PSLL_THOAI_201031':'NOD_PSLL_THOAI_n_2',
+        'SO_NGAY_BAT_MAY_201031':'SO_NGAY_BAT_MAY_n_2',
+        'THIET_BI_201130':'THIET_BI_n_1',
+        'SO_LAN_NAP_THE_201222':'SO_LAN_NAP_THE_n',
+        'SO_LAN_NAP_THE_201130':'SO_LAN_NAP_THE_n_1',
+        'SO_LAN_NAP_THE_201031':'SO_LAN_NAP_THE_n_2',
+        'SO_CUOC_GOI_201222':'SO_CUOC_GOI_n',
+        'SO_CUOC_GOI_201130':'SO_CUOC_GOI_n_1',
+        'SO_CUOC_GOI_201031':'SO_CUOC_GOI_n_2',
+        })
+
+df2 = df2.query('THIET_BI_n_1 == "4G"')
+
+df2.groupby('thuc_4g_201231').ISDN_201231.nunique()
+
+df2 = df2.drop(columns = 'THIET_BI_n_1')
+
+##Normalizing (Standardizing) and Rescaling Data######################
+missing_cnt = df2.isnull().sum()
+
+df2 = df2.fillna(0)
+
+df2.dtypes
+
+norm_df = (df2.drop(columns = ['ISDN_201231']) - df2.drop(columns =['ISDN_201231']).min())/ (df2.drop(columns =['ISDN_201231']).max() - df2.drop(columns =['ISDN_201231']).min())
+
+norm_df.head()
+
+output = 'thuc_4g_201231'
+
+inputs = [c for c in norm_df.columns if c != output]
+
+#partition data
+
+x = norm_df[inputs]
+y = norm_df[output]
+
+train_x, valid_x, train_y, valid_y = train_test_split(x,y,
+                                                      test_size = 0.3,
+                                                      random_state = 1)
+
+clf = MLPClassifier(hidden_layer_sizes= (8,4),
+                    activation= 'logistic',
+                    solver='lbfgs',
+                    random_state = 1)
+
+clf.fit(train_x, train_y)
+
+# training performance (use idxmax to revert the one-hotencoding)
+classificationSummary(train_y, clf.predict(train_x))
+# validation performance
+classificationSummary(valid_y, clf.predict(valid_x))
+
+# Save to file
+pickle.dump(clf, open('G:/Phu/Ad_hoc/4G_Thuc/4G_Thuc_T12021/python_model.sav', 'wb'))
+
+# Load from file
+clf = pickle.load(open('G:/Phu/Ad_hoc/4G_Thuc/4G_Thuc_T12021/python_model.sav', 'rb'))
+
+##########################Valid_DATA T1#####################################
+
+df_valid = pd.read_csv("G:/Phu/Ad_hoc/4G_Thuc/4G_Thuc_T12021/tap_valid.CSV", sep = '|')
+
+df_valid = df_valid.drop(columns = ['THIET_BI_210120', 'thuc_4g_210120'])
+
+df_valid = df_valid.merge(multisim, left_on = "ISDN_210120", right_on = "isdn", how = "left")
+
+df_valid = df_valid.drop(columns = ['isdn'])
+
+a = norm_df.columns
+
+df_valid = df_valid.rename(
+    columns = {
+        'TONG_CUOC_GOC_THUC_210120':'TONG_CUOC_GOC_THUC_n',
+        'TONG_CUOC_GOC_THUC_201231':'TONG_CUOC_GOC_THUC_n_1',
+        'TONG_CUOC_GOC_THUC_201130':'TONG_CUOC_GOC_THUC_n_2',
+        'num_day_4g_210120':'num_day_4g_n',
+        'SO_NGAY_SU_DUNG_210120':'SO_NGAY_SU_DUNG_n',
+        'NOD_PSLL_DATA_210120':'NOD_PSLL_DATA_n',
+        'NOD_PSLL_THOAI_210120':'NOD_PSLL_THOAI_n',
+        'SO_NGAY_BAT_MAY_210120':'SO_NGAY_BAT_MAY_n',
+        'num_day_4g_201231':'num_day_4g_n_1',
+        'SO_NGAY_SU_DUNG_201231':'SO_NGAY_SU_DUNG_n_1',
+        'NOD_PSLL_DATA_201231':'NOD_PSLL_DATA_n_1',
+        'NOD_PSLL_THOAI_201231':'NOD_PSLL_THOAI_n_1',
+        'SO_NGAY_BAT_MAY_201231':'SO_NGAY_BAT_MAY_n_1',
+        'num_day_4g_201130':'num_day_4g_n_2',
+        'SO_NGAY_SU_DUNG_201130':'SO_NGAY_SU_DUNG_n_2',
+        'NOD_PSLL_DATA_201130':'NOD_PSLL_DATA_n_2',
+        'NOD_PSLL_THOAI_201130':'NOD_PSLL_THOAI_n_2',
+        'SO_NGAY_BAT_MAY_201130':'SO_NGAY_BAT_MAY_n_2',
+        'SO_LAN_NAP_THE_210120':'SO_LAN_NAP_THE_n',
+        'SO_LAN_NAP_THE_201231':'SO_LAN_NAP_THE_n_1',
+        'SO_LAN_NAP_THE_201130':'SO_LAN_NAP_THE_n_2',
+        'SO_CUOC_GOI_210120':'SO_CUOC_GOI_n',
+        'SO_CUOC_GOI_201231':'SO_CUOC_GOI_n_1',
+        'SO_CUOC_GOI_201130':'SO_CUOC_GOI_n_2',
+        })
+
+df_valid = df_valid.fillna(0)
+
+norm_df_valid = (df_valid.drop(columns = ['ISDN_210120']) - df_valid.drop(columns =['ISDN_210120']).min())/ (df_valid.drop(columns =['ISDN_210120']).max() - df_valid.drop(columns =['ISDN_210120']).min())
+
+predict_kq = clf.predict_proba(norm_df_valid)
+
+prediction = (pd.concat([
+    df_valid['ISDN_210120'],
+    pd.DataFrame(clf.predict_proba(norm_df_valid))
+], axis=1))
+
+prediction = prediction.rename(columns = {
+    '0' : 'No',
+    '1' : 'Yes'
+    })
+
+prediction.columns = ['isdn', 'No', 'Yes']
+
+np.percentile(prediction['Yes'], 70)
+
+prediction.to_csv("G:/Phu/Ad_hoc/4G_Thuc/4G_Thuc_T12021/Predict_result.csv", index = False)
+
+#Sort decreasing order
+
+isdn_sort = prediction.sort_values(by = 'Yes', ascending = False)
+
+def case_when (isdn_sort):
+    if isdn_sort['Yes'] > 0.8778274652712137:
+        return 1
+    else:
+        return 0
+
+isdn_sort['Move'] = isdn_sort.apply(case_when, axis = 1)
+
+isdn_sort.groupby('Move').isdn.nunique()
+
+isdn_sort_final = isdn_sort[isdn_sort['Move'] == 1]
+
+isdn_prediction_final = isdn_sort_final['isdn']
+
+isdn_prediction_final.to_csv("G:/Phu/Ad_hoc/4G_Thuc/4G_Thuc_T12021/isdn_prediction_final.csv", index = False)
+
+
+#EDA data##############################################
+
+import joypy
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+plt.title('Tỷ lệ đạt thực 4G tự nhiên', size = 15)
+sns.countplot(df2.thuc_4g_201231, edgecolor = (0,0,0))
+plt.show()
+
+plt.figure(figsize = (8,8))
+sns.countplot(x='thuc_4g_201231', hue='multisimm', data=df2, edgecolor = (0,0,0))
+
+def plot_distribution_num(data_select) : 
+    sns.set_style("ticks")
+    s = sns.FacetGrid(df2, hue = 'thuc_4g_201231',aspect = 2.5, palette ={0 : 'lightblue', 1 : 'gold'})
+    s.map(sns.kdeplot, data_select, shade = True, alpha = 0.8)
+    s.set(xlim=(0, 90))
+    s.add_legend()
+    s.set_axis_labels(data_select, 'proportion')
+    s.fig.suptitle(data_select)
+    plt.show()
+    
+plot_distribution_num('SO_CUOC_GOI_n')
+plot_distribution_num('SO_CUOC_GOI_n_1')
+plot_distribution_num('SO_CUOC_GOI_n_2')
+
+np.percentile(df2['SO_CUOC_GOI_n'], [10,20,30,40,50,6,70,80,90])
+
+ftth = pd.read_csv("G:/Phu/Ad_hoc/CEM Data/FTTH_C360.CSV")
+
+ftth.head()
+
+ftth_v1 = ftth.drop_duplicates(subset = ['account_ftth'])
+
+
+a = ftth_v1[['flag_use_combo','avg_device_06h_8h59']]
+
+a.dtypes
+
+a['flag_use_combo'] = a.flag_use_combo.astype('int')
+
+# a['sltb_truycap_modem'] = a.sltb_truycap_modem.fillna(0)
+
+a = a.dropna()
+
+a = pd.DataFrame(a)
+
+def if_fun (ftth):
+    if a['flag_use_combo'] != 0:
+        return 'Combo'
+    else:
+        return 'Only'
+
+a['comboo'] = a.apply(if_fun, axis = 1)
+
+def plot_distribution_num(data_select) : 
+    sns.set_style("ticks")
+    s = sns.FacetGrid(a, hue = 'flag_use_combo',aspect = 2.5, palette ={0 : 'lightblue', 1 : 'gold'})
+    s.map(sns.kdeplot, data_select, shade = True, alpha = 0.8)
+    s.set(xlim=(1, 10))
+    s.add_legend()
+    s.set_axis_labels(data_select, 'proportion')
+    s.fig.suptitle(data_select)
+    plt.show()
+    
+plot_distribution_num('avg_device_06h_8h59')
+    
+b = a.groupby(['flag_use_combo','avg_device_06h_8h59']).agg({'flag_use_combo':'count'})
+
+b = b.rename(columns = {'flag_use_combo':'count'})
+
+b['sltb_truycap_modem'] = b.index.get_level_values('sltb_truycap_modem')
+b['sltb_truycap_modem'] = b.index.get_level_values('sltb_truycap_modem') 
+
+np.percentile(a['avg_device_06h_8h59'], [10,20,30,40,50,6,70,80,90,100])
+
+b.to_csv("G:/Phu/Ad_hoc/CEM Data/aaa.CSV")
+
+
+##############Density plot#################
+
+a = ftth_v1[['cust_type', 'group_type','avg_device_06h_8h59', 'avg_device_09h_14h59', 'avg_device_15h_16h59']]
+
+a.group_type.unique()
+
+a = a.dropna()
+
+#Density plot
+# instanciate the figure
+fig = plt.figure(figsize = (10, 8))
+
+# ----------------------------------------------------------------------------------------------------
+# plot the data
+# the idea is to iterate over each class
+# extract their data ad plot a sepate density plot
+
+g = sns.displot(a, kind="kde", fill=True)
+g.set(xlim=(1, 20))
+
+# set the title of the plot
+plt.title("Density Plot of City Mileage by n_cilinders");
